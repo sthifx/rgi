@@ -305,40 +305,55 @@ class BWT(object):
 
     def align_bowtie2_unpaired(self, reference_genome, index_directory, output_sam_file):
         """
-        Align unpaired reads to reference database selected (i.e card, wildcard etc) using bowtie2
+        Align unpaired reads to reference database selected (i.e card, wildcard etc) using bowtie2,
+        streaming directly to sorted BAM.
         """
-
         self.check_index(index_directory=index_directory,
                          reference_genome=reference_genome)
 
-        cmd = "bowtie2 --very-sensitive-local --threads {threads} -x {index_directory} -U {unpaired_reads}  -S {output_sam_file}".format(
+        cmd = (
+            "bowtie2 --very-sensitive-local --threads {threads} "
+            "-x {index_directory} -U {unpaired_reads} "
+            "| samtools view --threads {threads} -b - "
+            "| samtools sort --threads {threads} -T {output_file}.sorted "
+            "-o {sorted_bam_file} -"
+        ).format(
             threads=self.threads,
             index_directory=index_directory,
             unpaired_reads=self.read_one,
-            output_sam_file=output_sam_file
+            output_file=self.output_file,
+            sorted_bam_file=self.output_bam_sorted_file
         )
 
-        os.system(cmd)
+        subprocess.run(cmd, shell=True, check=True, executable="/bin/bash")
 
     def align_bowtie2(self, reference_genome, index_directory, output_sam_file):
         """
-        Align paired reads to reference database selected (i.e card, wildcard etc) using bowtie2
+        Align paired reads to reference database selected (i.e card, wildcard etc) using bowtie2,
+        streaming directly to sorted BAM.
         """
         self.check_index(index_directory=index_directory,
                          reference_genome=reference_genome)
 
         logger.info("align reads -1 {} -2 {} to {}".format(self.read_one,
-                    self.read_two, reference_genome))
+                                                           self.read_two, reference_genome))
 
-        cmd = "bowtie2 --quiet --very-sensitive-local --threads {threads} -x {index_directory} -1 {read_one} -2 {read_two}  -S {output_sam_file}".format(
+        cmd = (
+            "bowtie2 --quiet --very-sensitive-local --threads {threads} "
+            "-x {index_directory} -1 {read_one} -2 {read_two} "
+            "| samtools view --threads {threads} -b - "
+            "| samtools sort --threads {threads} -T {output_file}.sorted "
+            "-o {sorted_bam_file} -"
+        ).format(
             threads=self.threads,
             index_directory=index_directory,
             read_one=self.read_one,
             read_two=self.read_two,
-            output_sam_file=output_sam_file
+            output_file=self.output_file,
+            sorted_bam_file=self.output_bam_sorted_file
         )
 
-        os.system(cmd)
+        subprocess.run(cmd, shell=True, check=True, executable="/bin/bash")
 
     def align_bowtie2_baits_to_genes(self, reference_genome, index_directory, output_sam_file):
         """
@@ -361,32 +376,50 @@ class BWT(object):
 
     def align_bwa_single_end_mapping(self, reference_genome, index_directory, output_sam_file):
         """
-        Align unpaired reads to reference database selected (i.e card, wildcard etc) using bwa
+        Align unpaired reads to reference database selected (i.e card, wildcard etc) using bwa,
+        streaming directly to sorted BAM.
         """
         self.check_index(index_directory=index_directory,
                          reference_genome=reference_genome)
-        os.system("bwa mem -M -t {threads} {index_directory} {read_one} > {output_sam_file}".format(
+            
+        cmd = (
+            "bwa mem -M -t {threads} {index_directory} {read_one} "
+            "| samtools view --threads {threads} -b - "
+            "| samtools sort --threads {threads} -T {output_file}.sorted "
+            "-o {sorted_bam_file} -"
+        ).format(
             threads=self.threads,
             index_directory=index_directory,
             read_one=self.read_one,
-            output_sam_file=output_sam_file
+            output_file=self.output_file,
+            sorted_bam_file=self.output_bam_sorted_file
         )
-        )
+
+        subprocess.run(cmd, shell=True, check=True, executable="/bin/bash")
 
     def align_bwa_paired_end_mapping(self, reference_genome, index_directory, output_sam_file):
         """
-        Align paired reads to reference database selected (i.e card, wildcard etc) using bwa
+        Align paired reads to reference database selected (i.e card, wildcard etc) using bwa,
+        streaming directly to sorted BAM.
         """
         self.check_index(index_directory=index_directory,
                          reference_genome=reference_genome)
-        os.system("bwa mem -t {threads} {index_directory} {read_one} {read_two} > {output_sam_file}".format(
+        
+        cmd = (
+            "bwa mem -t {threads} {index_directory} {read_one} {read_two} "
+            "| samtools view --threads {threads} -b - "
+            "| samtools sort --threads {threads} -T {output_file}.sorted "
+            "-o {sorted_bam_file} -"
+        ).format(
             threads=self.threads,
             index_directory=index_directory,
             read_one=self.read_one,
             read_two=self.read_two,
-            output_sam_file=output_sam_file
+            output_file=self.output_file,
+            sorted_bam_file=self.output_bam_sorted_file
         )
-        )
+
+        subprocess.run(cmd, shell=True, check=True, executable="/bin/bash")
 
     def convert_sam_to_bam(self, input_sam_file, output_bam_file):
         """
@@ -419,18 +452,11 @@ class BWT(object):
 
     def extract_alignments_with_length(self, length=10, map_quality=2):
         """
-        Get alignments from bam file using length as a filter (default length=10, map_quality=2)
-        TODO:: add filters (mapped, length, coverage and map_quality)
+        Legacy placeholder step. No filtering is currently applied.
+        Reuse the already sorted BAM directly.
         """
-        cmd = "bamtools filter -in {input_bam} -out {output_bam}".format(
-            input_bam=self.output_bam_sorted_file,
-            output_bam=self.sorted_bam_sorted_file_length_100,
-            length=length,
-            map_quality=map_quality
-        )
-        # logger.info(cmd)
-        subprocess.run(["bamtools", "filter", "-in", self.output_bam_sorted_file,
-                       "-out", self.sorted_bam_sorted_file_length_100])
+        self.sorted_bam_sorted_file_length_100 = self.output_bam_sorted_file
+        logger.info("Skipping legacy bamtools filter step; using sorted BAM directly.")
 
     def get_aligned(self):
         """
@@ -1929,6 +1955,8 @@ class BWT(object):
                 self.align_bowtie2(reference_genome=self.reference_genome,
                                    index_directory=self.index_directory_bowtie2, output_sam_file=self.output_sam_file)
         elif self.aligner == "kma":
+            logger.info("kma not supported")
+            return 
             if self.read_two == None:
                 self.align_kma_interleaved(reference_genome=self.reference_genome,
                                            index_directory=self.index_directory_kma, output_sam_file=self.output_sam_file)
@@ -1943,25 +1971,14 @@ class BWT(object):
                 self.align_bwa_paired_end_mapping(
                     reference_genome=self.reference_genome, index_directory=self.index_directory_bwa,  output_sam_file=self.output_sam_file)
 
-        # convert SAM file to BAM file
-        logger.info("convert SAM file to BAM file")
-        self.convert_sam_to_bam(
-            input_sam_file=self.output_sam_file, output_bam_file=self.output_bam_file)
-
-        # sort BAM file
-        logger.info("sort BAM file")
-        self.sort_bam()
-
-        # index BAM file
-        logger.info("index BAM file")
-        self.index_bam(bam_file=self.output_bam_sorted_file)
-
-        # only extract alignment of specific length
-        logger.info("only extract alignment of specific length")
+        logger.info("alignment streamed directly to sorted BAM")
+        
+        # Old non-functional code replaced to placeholder copy
+#        logger.info("only extract alignment of specific length")
         self.extract_alignments_with_length()
 
         # index filtered BAM file
-        logger.info("index filtered BAM file")
+        logger.info("index sorted BAM file")
         self.index_bam(bam_file=self.sorted_bam_sorted_file_length_100)
 
         # pull aligned
