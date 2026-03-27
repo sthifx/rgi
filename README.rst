@@ -19,6 +19,14 @@
 The Resistance Gene Identifier (RGI)
 ====================================
 
+This fork contains a patched `app/BWT.py` to stream alignments to BAM and reduce large temporary files.
+
+Current patched version:
+`stream-bam-fix/app/BWT.py`
+
+Use this file:
+https://github.com/sthifx/rgi/blob/stream-bam-fix/app/BWT.py
+
 This application is used to predict antibiotic resistome(s) from protein or nucleotide data based on homology and SNP models. The application uses reference data from the `Comprehensive Antibiotic Resistance Database (CARD) <https://card.mcmaster.ca/>`_.
 
 RGI analyses can be performed via the CARD website `RGI portal <https://card.mcmaster.ca/analyze/rgi>`_, via use of a `Galaxy wrapper <https://toolshed.g2.bx.psu.edu/view/card/rgi/715bc9aeef69>`_ for the `Galaxy <https://galaxyproject.org/tutorials/g101>`_ platform, or alternatively you can install RGI from Conda or run RGI from Docker (see below). The instructions below discuss use of RGI at the command line, following a general overview of how RGI works for genomes, genome assemblies, proteomes, and metagenomic sequencing.
