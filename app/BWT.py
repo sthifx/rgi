@@ -474,20 +474,41 @@ class BWT(object):
 
     def preload_alignments(self):
         """
-        Parse tab-delimited file into dictionary for mapped reads
+        Parse tab-delimited file into a compact per-reference summary.
+        
+        Instead of storing every alignment as a Python dict, keep only:
+        - sum of MAPQ values
+        - count of alignments contributing to MAPQ
+        - unique mate-pair linkage targets
         """
         self.alignments = {}
+
         with open(self.output_tab_sequences, 'r') as csvfile:
             reader = csv.reader(csvfile, delimiter='\t', quotechar='|')
             for row in reader:
-                self.alignments.setdefault(row[2], []).append({
-                    "qname": str(row[0]),
-                    "flag": str(row[1]),
-                    "rname": str(row[2]),
-                    "pos": str(row[3]),
-                    "mapq": str(row[4]),
-                    "mrnm": str(row[5])
-                })
+                if len(row) < 6:
+                    continue
+
+                rname = row[2]
+                mapq = row[4]
+                mrnm = row[5]
+
+                if rname not in self.alignments:
+                    self.alignments[rname] = {
+                        "mapq_sum": 0,
+                        "mapq_count": 0,
+                        "mate_pair": set()
+                    }
+
+                try:
+                    self.alignments[rname]["mapq_sum"] += int(mapq)
+                    self.alignments[rname]["mapq_count"] += 1
+                except Exception:
+                    pass
+
+                if mrnm != "=" and mrnm != "*":
+                    self.alignments[rname]["mate_pair"].add(mrnm)
+        logger.info("Loaded compact alignment summaries for {} references".format(len(self.alignments)))
 
     def get_qname_rname_sequence(self):
         """
@@ -760,8 +781,14 @@ class BWT(object):
         return baits
 
     def get_alignments(self, hit_id, ref_len=0):
-        sequences = self.alignments.get(hit_id, [])
-        return sequences
+        """
+        Return compact per-reference alignment summary.
+        """
+        return self.alignments.get(hit_id, {
+            "mapq_sum": 0,
+            "mapq_count": 0,
+            "mate_pair": set()
+        })
 
     def get_coverage_details(self, hit_id):
         """
@@ -1183,18 +1210,16 @@ class BWT(object):
         model_id = self.get_model_id(models_by_accession, alignment_hit)
 
         try:
-            alignments = self.get_alignments(alignment_hit)
-            mapq_l = []
+            alignment_stats = self.get_alignments(alignment_hit)
             mate_pair = []
             mapq_average = 0
-            for a in alignments:
-                mapq_l.append(int(a["mapq"]))
-                if a["mrnm"] != "=" and a["mrnm"] not in mate_pair:
-                    if "ARO:{}".format(models[model_id]["ARO_accession"]) not in a["mrnm"]:
-                        mate_pair.append(a["mrnm"])
 
-            if len(mapq_l) > 0:
-                mapq_average = sum(mapq_l)/len(mapq_l)
+            if alignment_stats["mapq_count"] > 0:
+                mapq_average = alignment_stats["mapq_sum"] / alignment_stats["mapq_count"]
+
+            for mrnm in sorted(alignment_stats["mate_pair"]):
+                if "ARO:{}".format(models[model_id]["ARO_accession"]) not in mrnm:
+                    mate_pair.append(mrnm)
 
             observed_in_genomes = "no data"
             observed_in_plasmids = "no data"
@@ -1342,7 +1367,6 @@ class BWT(object):
                 "observed_in_pathogens": observed_in_pathogens,
                 "range_of_reference_allele_source": percent_identity,
                 "reads": reads[alignment_hit],
-                "alignments": alignments,
                 "mapq_average": format(mapq_average, '.2f'),
                 "number_of_mapped_baits": number_of_mapped_baits,
                 "number_of_mapped_baits_with_reads": number_of_mapped_baits_with_reads,
@@ -1350,8 +1374,8 @@ class BWT(object):
                 "bait_coverage_coefficient_of_variation": bait_coverage_coefficient_of_variation,
                 "mate_pair": mate_pair,
                 "percent_coverage": {
-                    "covered": format(float(coverage[alignment_hit]["covered"] / coverage[alignment_hit]["length"])*100, '.2f'),
-                    "uncovered": format(float(coverage[alignment_hit]["uncovered"] / coverage[alignment_hit]["length"])*100, '.2f')
+                    "covered": format(float(coverage[alignment_hit]["covered"] / coverage[alignment_hit]["length"]) * 100, '.2f'),
+                    "uncovered": format(float(coverage[alignment_hit]["uncovered"] / coverage[alignment_hit]["length"]) * 100, '.2f')
                 },
                 "length_coverage": {
                     "covered": "{}".format(coverage[alignment_hit]["covered"]),
@@ -1361,10 +1385,11 @@ class BWT(object):
                     "sequence_length": "{}".format(coverage[alignment_hit]["length"])
                 },
                 "mutation": "N/A",
-                "resistomes": resistomes, "predicted_pathogen": "N/A",
-                "depth": read_coverage_depth,  # get from *.sam.temp.res file when using kma
-                "snps": snps,  # get from vcf file
-                "consensus_sequence_dna": consensus_sequence_dna,  # get from *.sam.temp.fsa
+                "resistomes": resistomes,
+                "predicted_pathogen": "N/A",
+                "depth": read_coverage_depth,
+                "snps": snps,
+                "consensus_sequence_dna": consensus_sequence_dna,
                 "consensus_sequence_protein": "{}".format(consensus_sequence_protein)
             }
         except Exception as e:
