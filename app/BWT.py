@@ -472,61 +472,69 @@ class BWT(object):
         subprocess.run(
             f"samtools idxstats {input_bam} > {output_tab}", shell=True, check=True)
 
-    def preload_alignments(self):
+    def get_qname_rname_sequence(self):
         """
-        Parse tab-delimited file into a compact per-reference summary.
-        
-        Instead of storing every alignment as a Python dict, keep only:
-        - sum of MAPQ values
-        - count of alignments contributing to MAPQ
-        - unique mate-pair linkage targets
+        Stream minimal alignment fields directly from BAM into a compact
+        per-reference alignment summary, without writing seqs.temp.txt.
+        Fields used:
+          3 RNAME
+          5 MAPQ
+          7 MRNM
         """
         self.alignments = {}
 
-        with open(self.output_tab_sequences, 'r') as csvfile:
-            reader = csv.reader(csvfile, delimiter='\t', quotechar='|')
-            for row in reader:
-                if len(row) < 6:
-                    continue
-
-                rname = row[2]
-                mapq = row[4]
-                mrnm = row[5]
-
-                if rname not in self.alignments:
-                    self.alignments[rname] = {
-                        "mapq_sum": 0,
-                        "mapq_count": 0,
-                        "mate_pair": set()
-                    }
-
-                try:
-                    self.alignments[rname]["mapq_sum"] += int(mapq)
-                    self.alignments[rname]["mapq_count"] += 1
-                except Exception:
-                    pass
-
-                if mrnm != "=" and mrnm != "*":
-                    self.alignments[rname]["mate_pair"].add(mrnm)
-        logger.info("Loaded compact alignment summaries for {} references".format(len(self.alignments)))
-
-    def get_qname_rname_sequence(self):
-        """
-        MAPQ (mapping quality - describes the uniqueness of the alignment, 0=non-unique, >10 probably unique) | awk '$5 > 0'
-        """
-        cmd = "samtools view --threads {threads} {input_bam} | cut -f 1,2,3,4,5,7 | sort -s -n -k 1,1 > {output_tab}".format(
+        cmd = (
+            "samtools view --threads {threads} {input_bam} "
+            "| cut -f 3,5,7"
+        ).format(
             threads=self.threads,
-            input_bam=self.sorted_bam_sorted_file_length_100,
-            output_tab=self.output_tab_sequences
+            input_bam=self.sorted_bam_sorted_file_length_100
         )
-        # logger.debug(cmd)
-        # os.system(cmd)
-        threads = self.threads
-        input_bam = self.sorted_bam_sorted_file_length_100
-        output_tab = self.output_tab_sequences
-        subprocess.run(
-            f"samtools view --threads {threads} {input_bam} | cut -f 1,2,3,4,5,7 | sort -s -n -k 1,1 > {output_tab}", shell=True, check=True)
-        self.preload_alignments()
+
+        proc = subprocess.Popen(
+            cmd,
+            shell=True,
+            executable="/bin/bash",
+            stdout=subprocess.PIPE,
+            text=True
+        )
+
+        for line in proc.stdout:
+            row = line.rstrip("\n").split("\t")
+            if len(row) < 3:
+                continue
+
+            rname = row[0]
+            mapq = row[1]
+            mrnm = row[2]
+
+            if rname not in self.alignments:
+                self.alignments[rname] = {
+                    "mapq_sum": 0,
+                    "mapq_count": 0,
+                    "mate_pair": set()
+                }
+
+            try:
+                self.alignments[rname]["mapq_sum"] += int(mapq)
+                self.alignments[rname]["mapq_count"] += 1
+            except Exception:
+                pass
+
+            if mrnm != "=" and mrnm != "*":
+                self.alignments[rname]["mate_pair"].add(mrnm)
+
+        ret = proc.wait()
+        if ret != 0:
+            raise RuntimeError(
+                "get_qname_rname_sequence failed with exit status {}".format(ret)
+            )
+
+        logger.info(
+            "Loaded compact alignment summaries for {} references".format(
+                len(self.alignments)
+            )
+        )
 
     def get_coverage(self):
         """
