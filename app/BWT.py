@@ -1988,14 +1988,27 @@ class BWT(object):
                 self.align_bowtie2(reference_genome=self.reference_genome,
                                    index_directory=self.index_directory_bowtie2, output_sam_file=self.output_sam_file)
         elif self.aligner == "kma":
-            logger.info("kma not supported")
-            return 
             if self.read_two == None:
-                self.align_kma_interleaved(reference_genome=self.reference_genome,
-                                           index_directory=self.index_directory_kma, output_sam_file=self.output_sam_file)
+                self.align_kma_interleaved(
+                    reference_genome=self.reference_genome,
+                    index_directory=self.index_directory_kma,
+                    output_sam_file=self.output_sam_file
+                )
             else:
-                self.align_kma(reference_genome=self.reference_genome,
-                               index_directory=self.index_directory_kma, output_sam_file=self.output_sam_file)
+                self.align_kma(
+                    reference_genome=self.reference_genome,
+                    index_directory=self.index_directory_kma,
+                    output_sam_file=self.output_sam_file
+                )
+
+            logger.info("convert KMA SAM to BAM")
+            self.convert_sam_to_bam(
+                input_sam_file=self.output_sam_file,
+                output_bam_file=self.output_bam_file
+            )
+
+            logger.info("sort KMA BAM")
+            self.sort_bam()
         else:
             if self.read_two == None:
                 self.align_bwa_single_end_mapping(
@@ -2004,7 +2017,7 @@ class BWT(object):
                 self.align_bwa_paired_end_mapping(
                     reference_genome=self.reference_genome, index_directory=self.index_directory_bwa,  output_sam_file=self.output_sam_file)
 
-        logger.info("alignment streamed directly to sorted BAM")
+        logger.info("alignment complete; sorted BAM ready")
         
         # Old non-functional code replaced to placeholder copy
 #        logger.info("only extract alignment of specific length")
